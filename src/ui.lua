@@ -578,179 +578,194 @@ function ui.drawSearch()
         imgui.PushStyleVar(ImGuiStyleVar_FramePadding, { 0, 0 })
 
         if currentTab.status == searchStatus.found then
-            local clipper = ImGuiListClipper.new()
-            clipper:Begin(#currentTab.results, rowHeight)
+            local totalItems = #currentTab.results
 
-            while clipper:Step() do
-                for i = clipper.DisplayStart, clipper.DisplayEnd - 1 do
-                    local itemEntry = currentTab.results[i + 1]
-                    local itemId = itemEntry.id
-                    local itemStack = itemEntry.stack
-                    local index = itemEntry.index
+            -- Calculate visible range
+            local scrollY = imgui.GetScrollY()
+            local windowHeight = imgui.GetWindowHeight()
 
-                    local isSelected = (currentTab.selectedItem == itemId and currentTab.selectedIndex == index)
-                    local itemLabel = items[itemId].shortName
-                    local bitmap = items[itemId].bitmap
-                    local imageSize = items[itemId].imageSize
+            local displayStart = math.floor(scrollY / rowHeight)
+            local displayEnd = displayStart + math.ceil(windowHeight / rowHeight) + 1
 
-                    if itemId ~= nil and preview.textureCache[itemId] == nil then
-                        preview.textureCache[itemId] = utils.createTextureFromGame(bitmap, imageSize)
-                    end
-                    local iconPointer = tonumber(ffi.cast('uint32_t', preview.textureCache[itemId]))
+            if displayStart < 0 then displayStart = 0 end
+            if displayEnd > totalItems then displayEnd = totalItems end
 
-                    local iconClicked = false
-                    local labelClicked = false
+            -- Top dummy to push content down
+            imgui.SetCursorPosY(displayStart * rowHeight)
 
-                    -- Full-width row
-                    local availWidth = imgui.GetContentRegionAvail()
+            -- Render only visible items
+            for i = displayStart, displayEnd - 1 do
+                local itemEntry = currentTab.results[i + 1]
+                local itemId = itemEntry.id
+                local itemStack = itemEntry.stack
+                local index = itemEntry.index
 
-                    imgui.PushID(i)
+                local isSelected = (currentTab.selectedItem == itemId and currentTab.selectedIndex == index)
+                local itemLabel = items[itemId].shortName
+                local bitmap = items[itemId].bitmap
+                local imageSize = items[itemId].imageSize
 
-                    -- Alternating row background
-                    local isEvenRow = (i + 1) % 2 == 0
-                    if isEvenRow then
-                        local drawList = imgui.GetWindowDrawList()
-                        local min_x, min_y = imgui.GetCursorScreenPos()
-                        local max_x = min_x + availWidth
-                        local max_y = min_y + rowHeight
-                        local bgColor = 0x22000000 -- Higher opacity dark gray for visible contrast
-                        drawList:AddRectFilled({ min_x, min_y }, { max_x, max_y }, bgColor)
-                    end
+                if itemId ~= nil and preview.textureCache[itemId] == nil then
+                    preview.textureCache[itemId] = utils.createTextureFromGame(bitmap, imageSize)
+                end
+                local iconPointer = tonumber(ffi.cast('uint32_t', preview.textureCache[itemId]))
 
-                    -- Bellhop checkbox
-                    local showBhCheckbox = auctioneer.config.bellhopCommands[1]
-                        and (auctioneer.currentTab == tabTypes.inventory or auctioneer.currentTab == tabTypes.mogGarden)
-                        and AshitaCore:GetPluginManager():Get('Bellhop')
+                local iconClicked = false
+                local labelClicked = false
 
-                    local checkboxSize = rowHeight * 0.8
-                    local checkboxWidth = showBhCheckbox and rowHeight or 0
-                    local iconWidth = rowHeight
-                    local remainingWidth = availWidth - checkboxWidth - iconWidth
+                -- Full-width row
+                local availWidth = imgui.GetContentRegionAvail()
 
-                    imgui.BeginGroup()
+                imgui.PushID(i)
 
-                    if showBhCheckbox then
-                        auctioneer.tabs[auctioneer.currentTab].bhChecked = auctioneer.tabs[auctioneer.currentTab].bhChecked or {}
-                        local key = tostring(itemId) .. ':' .. tostring(index or 0)
-                        local checkedTbl = { auctioneer.tabs[auctioneer.currentTab].bhChecked[key] == true }
+                -- Alternating row background
+                local isEvenRow = (i + 1) % 2 == 0
+                if isEvenRow then
+                    local drawList = imgui.GetWindowDrawList()
+                    local min_x, min_y = imgui.GetCursorScreenPos()
+                    local max_x = min_x + availWidth
+                    local max_y = min_y + rowHeight
+                    local bgColor = 0x22000000 -- Higher opacity dark gray for visible contrast
+                    drawList:AddRectFilled({ min_x, min_y }, { max_x, max_y }, bgColor)
+                end
 
-                        if imgui.InvisibleButton('##bhchk_btn', { rowHeight, rowHeight }) then
-                            checkedTbl[1] = not checkedTbl[1]
-                            auctioneer.tabs[auctioneer.currentTab].bhChecked[key] = checkedTbl[1] or nil
-                        end
+                -- Bellhop checkbox
+                local showBhCheckbox = auctioneer.config.bellhopCommands[1]
+                    and (auctioneer.currentTab == tabTypes.inventory or auctioneer.currentTab == tabTypes.mogGarden)
+                    and AshitaCore:GetPluginManager():Get('Bellhop')
 
-                        -- Draw centered checkbox
-                        local btn_min_x, btn_min_y = imgui.GetItemRectMin()
-                        local btn_max_x, btn_max_y = imgui.GetItemRectMax()
-                        local drawList = imgui.GetWindowDrawList()
-                        local btn_center_x = btn_min_x + (btn_max_x - btn_min_x) * 0.5
-                        local btn_center_y = btn_min_y + (btn_max_y - btn_min_y) * 0.5
+                local checkboxSize = rowHeight * 0.8
+                local checkboxWidth = showBhCheckbox and rowHeight or 0
+                local iconWidth = rowHeight
+                local remainingWidth = availWidth - checkboxWidth - iconWidth
 
-                        local half_size = checkboxSize * 0.5
-                        local min_x = btn_center_x - half_size
-                        local min_y = btn_center_y - half_size
-                        local max_x = btn_center_x + half_size
-                        local max_y = btn_center_y + half_size
-                        local checkSize = checkboxSize * 0.8
+                imgui.BeginGroup()
 
-                        local bgColor = checkedTbl[1] and 0xFF4080FF or 0xFF2c2c2c
-                        drawList:AddRectFilled({ min_x, min_y }, { max_x, max_y }, bgColor, 2)
+                if showBhCheckbox then
+                    auctioneer.tabs[auctioneer.currentTab].bhChecked = auctioneer.tabs[auctioneer.currentTab].bhChecked or {}
+                    local key = tostring(itemId) .. ':' .. tostring(index or 0)
+                    local checkedTbl = { auctioneer.tabs[auctioneer.currentTab].bhChecked[key] == true }
 
-                        if checkedTbl[1] then
-                            local markSize = checkSize * 0.3
-                            local center_x = btn_center_x
-                            local center_y = btn_center_y
-                            drawList:AddLine({ center_x - markSize, center_y },
-                                { center_x - markSize * 0.3, center_y + markSize * 0.7 },
-                                0xFFFFFFFF, 2)
-                            drawList:AddLine({ center_x - markSize * 0.3, center_y + markSize * 0.7 },
-                                { center_x + markSize, center_y - markSize * 0.5 },
-                                0xFFFFFFFF, 2)
-                        end
-
-                        imgui.SameLine(0, 2) -- 2px spacing after checkbox
+                    if imgui.InvisibleButton('##bhchk_btn', { rowHeight, rowHeight }) then
+                        checkedTbl[1] = not checkedTbl[1]
+                        auctioneer.tabs[auctioneer.currentTab].bhChecked[key] = checkedTbl[1] or nil
                     end
 
-                    if iconPointer then
-                        if imgui.InvisibleButton('icon_btn', { iconSize, rowHeight }) then
-                            iconClicked = true
-                        end
+                    -- Draw centered checkbox
+                    local btn_min_x, btn_min_y = imgui.GetItemRectMin()
+                    local btn_max_x, btn_max_y = imgui.GetItemRectMax()
+                    local drawList = imgui.GetWindowDrawList()
+                    local btn_center_x = btn_min_x + (btn_max_x - btn_min_x) * 0.5
+                    local btn_center_y = btn_min_y + (btn_max_y - btn_min_y) * 0.5
 
-                        local min_x, min_y = imgui.GetItemRectMin()
-                        local iconCenterY = min_y + (rowHeight - iconSize) * 0.5
-                        imgui.GetWindowDrawList():AddImage(iconPointer,
-                            { min_x, iconCenterY },
-                            { min_x + iconSize, iconCenterY + iconSize })
+                    local half_size = checkboxSize * 0.5
+                    local min_x = btn_center_x - half_size
+                    local min_y = btn_center_y - half_size
+                    local max_x = btn_center_x + half_size
+                    local max_y = btn_center_y + half_size
+                    local checkSize = checkboxSize * 0.8
 
-                        imgui.SameLine(0, 2) -- 2px spacing after icon
+                    local bgColor = checkedTbl[1] and 0xFF4080FF or 0xFF2c2c2c
+                    drawList:AddRectFilled({ min_x, min_y }, { max_x, max_y }, bgColor, 2)
+
+                    if checkedTbl[1] then
+                        local markSize = checkSize * 0.3
+                        local center_x = btn_center_x
+                        local center_y = btn_center_y
+                        drawList:AddLine({ center_x - markSize, center_y },
+                            { center_x - markSize * 0.3, center_y + markSize * 0.7 },
+                            0xFFFFFFFF, 2)
+                        drawList:AddLine({ center_x - markSize * 0.3, center_y + markSize * 0.7 },
+                            { center_x + markSize, center_y - markSize * 0.5 },
+                            0xFFFFFFFF, 2)
                     end
 
-                    -- Item label
-                    local baseLabel = itemLabel
-                    if auctioneer.currentTab ~= tabTypes.allItems then
-                        baseLabel = string.format('%s (%s)', items[itemId].shortName, itemStack)
+                    imgui.SameLine(0, 2) -- 2px spacing after checkbox
+                end
+
+                if iconPointer then
+                    if imgui.InvisibleButton('icon_btn', { iconSize, rowHeight }) then
+                        iconClicked = true
                     end
 
-                    -- Restriction flags
-                    local flags = {}
-                    if not items[itemId].isAuctionable then
-                        table.insert(flags, 'Auction')
+                    local min_x, min_y = imgui.GetItemRectMin()
+                    local iconCenterY = min_y + (rowHeight - iconSize) * 0.5
+                    imgui.GetWindowDrawList():AddImage(iconPointer,
+                        { min_x, iconCenterY },
+                        { min_x + iconSize, iconCenterY + iconSize })
+
+                    imgui.SameLine(0, 2) -- 2px spacing after icon
+                end
+
+                -- Item label
+                local baseLabel = itemLabel
+                if auctioneer.currentTab ~= tabTypes.allItems then
+                    baseLabel = string.format('%s (%s)', items[itemId].shortName, itemStack)
+                end
+
+                -- Restriction flags
+                local flags = {}
+                if not items[itemId].isAuctionable then
+                    table.insert(flags, 'Auction')
+                end
+                if not items[itemId].isBazaarable then
+                    table.insert(flags, 'Bazaar')
+                end
+                if not items[itemId].isVendorable then
+                    table.insert(flags, 'Vendor')
+                end
+                local flagsString = ''
+                if #flags > 0 then
+                    flagsString = 'X ' .. table.concat(flags, '/')
+                end
+
+                -- Font scale
+                local fontScale   = rowHeight / 24.0
+                local defaultFont = imgui.GetFont()
+                local defaultSize = imgui.GetFontSize()
+                local scaledSize  = defaultSize * fontScale
+
+                imgui.PushFont(defaultFont, scaledSize)
+
+                -- Row position for flags
+                local itemStartX = imgui.GetCursorPosX()
+                local itemStartY = imgui.GetCursorPosY()
+
+                if imgui.Selectable(baseLabel .. '##' .. itemId .. (index and ('-' .. index) or ''), isSelected, nil, { remainingWidth, rowHeight }) then
+                    labelClicked = true
+                end
+
+                -- Flags on right
+                if flagsString ~= '' then
+                    local textWidth = imgui.CalcTextSize(flagsString)
+                    imgui.SetCursorPosX(itemStartX + remainingWidth - textWidth - 5) -- 5px padding from right edge
+                    imgui.SetCursorPosY(itemStartY + (rowHeight - imgui.GetFontSize()) * 0.5)
+
+                    local flagColor
+                    if isSelected or imgui.IsItemHovered() then
+                        flagColor = { 1.0, 1.0, 1.0, 1.0 } -- White when selected/hovered
+                    else
+                        flagColor = { 1.0, 0.3, 0.3, 1.0 } -- Red when normal
                     end
-                    if not items[itemId].isBazaarable then
-                        table.insert(flags, 'Bazaar')
-                    end
-                    if not items[itemId].isVendorable then
-                        table.insert(flags, 'Vendor')
-                    end
-                    local flagsString = ''
-                    if #flags > 0 then
-                        flagsString = 'X ' .. table.concat(flags, '/')
-                    end
+                    imgui.TextColored(flagColor, flagsString)
+                end
 
-                    -- Font scale
-                    local fontScale   = rowHeight / 24.0
-                    local defaultFont = imgui.GetFont()
-                    local defaultSize = imgui.GetFontSize()
-                    local scaledSize  = defaultSize * fontScale
+                imgui.PopFont()
 
-                    imgui.PushFont(defaultFont, scaledSize)
+                imgui.EndGroup()
+                imgui.PopID()
 
-                    -- Row position for flags
-                    local itemStartX = imgui.GetCursorPosX()
-                    local itemStartY = imgui.GetCursorPosY()
-
-                    if imgui.Selectable(baseLabel .. '##' .. itemId .. (index and ('-' .. index) or ''), isSelected, nil, { remainingWidth, rowHeight }) then
-                        labelClicked = true
-                    end
-
-                    -- Flags on right
-                    if flagsString ~= '' then
-                        local textWidth = imgui.CalcTextSize(flagsString)
-                        imgui.SetCursorPosX(itemStartX + remainingWidth - textWidth - 5) -- 5px padding from right edge
-                        imgui.SetCursorPosY(itemStartY + (rowHeight - imgui.GetFontSize()) * 0.5)
-
-                        local flagColor
-                        if isSelected or imgui.IsItemHovered() then
-                            flagColor = { 1.0, 1.0, 1.0, 1.0 } -- White when selected/hovered
-                        else
-                            flagColor = { 1.0, 0.3, 0.3, 1.0 } -- Red when normal
-                        end
-                        imgui.TextColored(flagColor, flagsString)
-                    end
-
-                    imgui.PopFont()
-
-                    imgui.EndGroup()
-                    imgui.PopID()
-
-                    if iconClicked or labelClicked then
-                        currentTab.selectedItem = itemId
-                        currentTab.selectedIndex = index
-                    end
+                if iconClicked or labelClicked then
+                    currentTab.selectedItem = itemId
+                    currentTab.selectedIndex = index
                 end
             end
 
-            clipper:End()
+            if totalItems > 0 then
+                imgui.SetCursorPosY(totalItems * rowHeight)
+                imgui.Dummy({0, 0})
+            end
+
         else
             imgui.Text(searchStatus[currentTab.status])
         end
